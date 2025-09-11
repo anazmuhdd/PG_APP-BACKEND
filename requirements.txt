@@ -9,3 +9,4 @@ google-generativeai
 gunicorn
 uuid
 flask_sqlalchemy
+psycopg2-binary
