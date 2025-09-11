@@ -7,5 +7,4 @@ discord
 requests
 google-generativeai
 gunicorn
-json
 uuid
