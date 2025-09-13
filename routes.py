@@ -1,4 +1,4 @@
-import json, re
+import json, re, os, dotenv
 from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, current_app as app
 from models import db, User, Order
@@ -10,13 +10,17 @@ from helpers import (
     MEAL_PRICES
 )
 from langchain_core.prompts import ChatPromptTemplate
-from geminillm import GeminiLLM
-import os, dotenv
+from openai import OpenAI  # NVIDIA uses OpenAI-compatible API
 
-# LLM setup
+# --- Load NVIDIA API key ---
 dotenv.load_dotenv()
-API_KEY = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "api_key")
-llm = GeminiLLM(api_key=API_KEY)
+NVIDIA_API_KEY = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "nvidia_api_key")
+
+# --- LLM Setup ---
+client = OpenAI(
+    base_url="https://integrate.api.nvidia.com/v1",
+    api_key=NVIDIA_API_KEY,
+)
 
 template = """
 You are "PG Bot", handling food orders for a PG group on WhatsApp.
@@ -27,11 +31,11 @@ Context:
 - Meals available: breakfast, lunch, dinner.
 - Users may place new orders, update existing ones, or cancel.
 - Orders can be in English, Malayalam, or mixed language.
-
+- Check the langauge as it will be in manglish fromat, so undertand it respond accurately
 Date & Time Rules (very important):
 1. If user explicitly specifies a date (like "on Sep 8" or "for today"), use that date.
 2. If no date is specified:
-   - then check the time right now and the message_time that you will be recieving and think precisely and then decide the order.
+   - then check the time right now in India and the message_time that you will be recieving and think precisely and then decide the order.
    -if you are unsure with it ask it as a query again as yu are holding chat history.
 3. If the message says "tomorrow", map it to the next calendar date after message_time.
 4. If the user says "change today's order" or similar, map it to today's date.
@@ -76,16 +80,14 @@ New message from {user_name} ({user_id}) at {message_time}:
 {message}
 """
 
-
 prompt = ChatPromptTemplate.from_template(template)
-chain = prompt | llm
 
 bp = Blueprint("routes", __name__)
 
 # --- Routes ---
 @bp.route("/")
 def home():
-    return "PG backend running"
+    return "PG backend running with Qwen 🎉"
 
 # Add a new user
 @bp.route("/users", methods=["POST"])
@@ -143,6 +145,7 @@ def list_orders_for_user(whatsapp_id):
         return jsonify({"error": "User not found"}), 404
     orders = [o.as_dict() for o in Order.query.filter_by(user_id=u.id).all()]
     return jsonify({"username": u.username, "orders": orders})
+
 # --- Main process route ---
 @bp.route("/process", methods=["POST"])
 def process():
@@ -155,7 +158,6 @@ def process():
     if not message or not user_id:
         return jsonify({"error": "Missing message or user_id"}), 400
 
-    # Default to tomorrow if no date provided
     if not date_in:
         date_in = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
 
@@ -168,24 +170,31 @@ def process():
 
     print(f"Processing message from {user_name} ({user_id}) at {message_time} for date {date_in}")
 
-    # Call LLM
+    # Call NVIDIA Qwen LLM
     try:
-        result = chain.invoke({
-            "history": history_string,
-            "message": message,
-            "user_id": user_id,
-            "user_name": user_name or "Unknown",
-            "date": date_in,
-            "message_time": message_time
-        })
+        filled_prompt = prompt.format(
+            history=history_string,
+            message=message,
+            user_id=user_id,
+            user_name=user_name or "Unknown",
+            date=date_in,
+            message_time=message_time
+        )
+
+        completion = client.chat.completions.create(
+            model="qwen/qwen3-coder-480b-a35b-instruct",
+            messages=[{"role": "user", "content": filled_prompt}],
+            temperature=0.2,
+            top_p=0.7,
+            max_tokens=512,
+        )
+        result = completion.choices[0].message.content
     except Exception:
         app.logger.exception("LLM invocation failed")
         return jsonify({"reply": "Sorry, LLM error", "counter": 0}), 500
 
-    # Clean LLM output: remove <think> tags
+    # Clean LLM output
     clean = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL).strip()
-
-    # Strip ```json and ``` if present
     cleaned_json_str = re.sub(r"^```json\s*|\s*```$", "", clean, flags=re.DOTALL).strip()
 
     print("LLM Output (cleaned):\n", cleaned_json_str)
@@ -195,7 +204,6 @@ def process():
         parsed = json.loads(cleaned_json_str)
         print("Parsed JSON:\n", parsed)
     except json.JSONDecodeError:
-        # fallback if JSON parsing fails
         reply, counter = cleaned_json_str, 0
 
     if parsed:
@@ -204,13 +212,11 @@ def process():
         order_obj = parsed.get("order")
         action = parsed.get("action")
 
-        # Trust LLM's date if provided
         if order_obj and order_obj.get("date"):
             date_in = order_obj["date"]
         elif parsed.get("date"):
             date_in = parsed["date"]
 
-    # Get or create user
     user = get_or_create_user(user_id, user_name)
     print(f"Determined order date: {date_in}")
     print("Order object:", order_obj)
@@ -221,7 +227,6 @@ def process():
 
     response_payload = {"reply": reply or "", "counter": counter}
 
-    # Handle orders / cancel
     if counter == 1:
         if action == "cancel":
             cancel_date = parsed.get("date") or date_in
@@ -231,23 +236,19 @@ def process():
                     "reply", f"✅ Order for {cancel_date} canceled."
                 )
                 response_payload["canceled_order"] = canceled_order.as_dict()
-                print("Canceled order:", canceled_order)
             else:
                 response_payload["reply"] = parsed.get(
                     "reply", f"No active order found for {cancel_date}."
                 )
         elif order_obj:
-            # Normalize order
             order_obj.setdefault("date", date_in)
             order_obj["breakfast"] = int(order_obj.get("breakfast", 0))
             order_obj["lunch"] = int(order_obj.get("lunch", 0))
             order_obj["dinner"] = int(order_obj.get("dinner", 0))
             saved = upsert_order_for_user(user, order_obj)
-            print("Saved order:", saved)
             response_payload["reply"] = parsed.get("reply", "✅ Order recorded.")
             response_payload["order"] = saved.as_dict()
 
-    # Update chat history
     hist, _ = chat_histories.get(key, ([], datetime.utcnow()))
     hist.append(f"Bot: {response_payload['reply']}")
     chat_histories[key] = (hist, datetime.utcnow())
