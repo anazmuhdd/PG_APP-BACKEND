@@ -9,9 +9,18 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Load Supabase Postgres URL from .env
-POSTGRES_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), '.env'), 'POSTGRES_URL')
-app.config['SQLALCHEMY_DATABASE_URI'] = POSTGRES_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+DATABASE_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), '.env'), 'POSTGRES_URL')
+
+if not DATABASE_URL:
+    raise RuntimeError("❌ DATABASE_URL not set. Please add it in Render dashboard or .env file")
+
+# Render requires 'postgresql' not 'postgres' in the URI
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 
 db = SQLAlchemy(app)
 
