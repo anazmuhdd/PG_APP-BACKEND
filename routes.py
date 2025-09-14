@@ -298,3 +298,6 @@ def summary():
         "dinner_count": dinner_count,
         "total_amount": total
     })
+@bp.route("/ping", methods=["GET"])
+def ping():
+    return {"status": "ok", "message": "server alive"}
