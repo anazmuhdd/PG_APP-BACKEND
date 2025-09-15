@@ -37,6 +37,7 @@ Context:
    * If the user already has an order for a date and only wants to add a meal, just update that date instead of overwriting.
    * If the user tries to order again for tomorrow but already has lunch and dinner, only add missing meals like breakfast.
    * If nothing exists for tomorrow, create a new order normally.
+-Include the sender user_name with the reply text as it is to be sent in a group.
 Date & Time Rules (very important):
 1. If user explicitly specifies a date (like "on Sep 8" or "for today"), use that date.
 2. If no date is specified:
