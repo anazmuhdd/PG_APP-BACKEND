@@ -32,6 +32,11 @@ Context:
 - Users may place new orders, update existing ones, or cancel.
 - Orders can be in English, Malayalam, or mixed language.
 - Check the langauge as it will be in manglish fromat, so undertand it respond accurately
+- You also receive the last 2 previous orders of this user (`previous_orders`).
+- Use these previous orders to make smarter decisions:
+   * If the user already has an order for a date and only wants to add a meal, just update that date instead of overwriting.
+   * If the user tries to order again for tomorrow but already has lunch and dinner, only add missing meals like breakfast.
+   * If nothing exists for tomorrow, create a new order normally.
 Date & Time Rules (very important):
 1. If user explicitly specifies a date (like "on Sep 8" or "for today"), use that date.
 2. If no date is specified:
@@ -75,6 +80,7 @@ Variables available:
 - date: {date}  # default candidate date (from server-side logic, e.g. tomorrow)
 - message_time: {message_time}  # timestamp when user message was received
 - history: {history}
+- previous_orders: {previous_orders}  # last 2 orders with meals and dates
 
 New message from {user_name} ({user_id}) at {message_time}:
 {message}
@@ -154,7 +160,26 @@ def process():
     user_id = data.get("user_id")
     user_name = data.get("user_name")
     date_in = data.get("date")
-
+    # Fetch last 2 orders for this user (most recent first)
+    previous_orders = []
+    if user_id:
+        u = User.query.filter_by(whatsapp_id=user_id).first()
+        if u:
+            recent_orders = (
+                Order.query.filter_by(user_id=u.id)
+                .order_by(Order.order_date.desc())
+                .limit(2)
+                .all()
+            )
+            previous_orders = [
+                {
+                    "date": o.order_date.isoformat(),
+                    "breakfast": o.breakfast,
+                    "lunch": o.lunch,
+                    "dinner": o.dinner
+                }
+                for o in recent_orders
+            ]
     if not message or not user_id:
         return jsonify({"error": "Missing message or user_id"}), 400
 
@@ -178,7 +203,8 @@ def process():
             user_id=user_id,
             user_name=user_name or "Unknown",
             date=date_in,
-            message_time=message_time
+            message_time=message_time,
+            previous_orders=json.dumps(previous_orders)
         )
 
         completion = client.chat.completions.create(
