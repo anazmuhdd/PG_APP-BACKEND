@@ -335,3 +335,117 @@ def summary():
 @bp.route("/ping", methods=["GET"])
 def ping():
     return {"status": "ok", "message": "server alive"}
+# --- Missing Orders for a Date ---
+@bp.route("/missing_orders", methods=["GET"])
+def missing_orders():
+    """
+    Returns list of users who have NOT placed an order for the given date.
+    Example: /missing_orders?date=2025-09-15
+    """
+    date_s = request.args.get("date")
+    if not date_s:
+        date_s = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
+
+    try:
+        dt = datetime.fromisoformat(date_s).date()
+    except:
+        return jsonify({"error": "invalid date"}), 400
+
+    # All active users
+    users = User.query.all()
+    ordered_users = {
+        o.user_id
+        for o in Order.query.filter_by(order_date=dt, canceled=False).all()
+    }
+
+    missing = [
+        {"whatsapp_id": u.whatsapp_id, "username": u.username}
+        for u in users if u.id not in ordered_users
+    ]
+
+    return jsonify({
+        "date": date_s,
+        "missing_count": len(missing),
+        "missing_users": missing
+    })
+
+
+# --- Detailed Orders Summary (who ordered what) ---
+@bp.route("/detailed_summary", methods=["GET"])
+def detailed_summary():
+    """
+    Returns full breakdown of orders per user for a given date.
+    Example: /detailed_summary?date=2025-09-15
+    """
+    date_s = request.args.get("date")
+    if not date_s:
+        date_s = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
+
+    try:
+        dt = datetime.fromisoformat(date_s).date()
+    except:
+        return jsonify({"error": "invalid date"}), 400
+
+    orders = Order.query.filter_by(order_date=dt, canceled=False).all()
+    order_list = []
+    for o in orders:
+        user = User.query.get(o.user_id)
+        order_list.append({
+            "username": user.username,
+            "whatsapp_id": user.whatsapp_id,
+            "breakfast": bool(o.breakfast),
+            "lunch": bool(o.lunch),
+            "dinner": bool(o.dinner)
+        })
+
+    return jsonify({
+        "date": date_s,
+        "orders": order_list,
+        "total_orders": len(order_list)
+    })
+
+
+# --- Cron-friendly endpoint to combine summary + missing ---
+@bp.route("/daily_report", methods=["GET"])
+def daily_report():
+    """
+    Combined report of orders + missing users.
+    Example: /daily_report?date=2025-09-15
+    """
+    date_s = request.args.get("date")
+    if not date_s:
+        date_s = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
+
+    try:
+        dt = datetime.fromisoformat(date_s).date()
+    except:
+        return jsonify({"error": "invalid date"}), 400
+
+    # Orders
+    orders = Order.query.filter_by(order_date=dt, canceled=False).all()
+    users = User.query.all()
+    ordered_ids = {o.user_id for o in orders}
+
+    order_details = []
+    for o in orders:
+        user = User.query.get(o.user_id)
+        order_details.append({
+            "username": user.username,
+            "whatsapp_id": user.whatsapp_id,
+            "breakfast": bool(o.breakfast),
+            "lunch": bool(o.lunch),
+            "dinner": bool(o.dinner),
+        })
+
+    missing_users = [
+        {"username": u.username, "whatsapp_id": u.whatsapp_id}
+        for u in users if u.id not in ordered_ids
+    ]
+
+    return jsonify({
+        "date": date_s,
+        "orders": order_details,
+        "missing_users": missing_users,
+        "total_orders": len(order_details),
+        "missing_count": len(missing_users)
+    })
