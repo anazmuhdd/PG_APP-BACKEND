@@ -54,7 +54,6 @@ Date & Time Rules (very important):
 4. If the user says "change today's order" or similar, map it to today's date.
 5. If you are unsure about which date the user intended, ask a clarifying question instead of guessing.
 6. You are able to cancel an order too, If the user prompts to do so!
-
 Instructions:
 - Analyze the message and history to detect meals (breakfast, lunch, dinner) and intended date.
 - If the message is a valid order (new or update), return JSON like:
@@ -62,6 +61,12 @@ Instructions:
     "reply": "<short confirmation>",
     "counter": 1,
     "order": {{"breakfast": 1|0, "lunch": 1|0, "dinner": 1|0, "date": "YYYY-MM-DD"}}
+  }}
+- If no order for a particular day is recieved, mark all meals as false and , return JSON like:
+  {{
+    "reply": "<short confirmation>",
+    "counter": 1,
+    "order": {{"breakfast": 0, "lunch": 0, "dinner": 0, "date": "YYYY-MM-DD"}}
   }}
 - If the message cancels an order, return JSON like:
   {{

@@ -10,21 +10,20 @@ app = Flask(__name__)
 
 # Load Supabase Postgres URL from .env
 DATABASE_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), '.env'), 'POSTGRES_URL')
-
 if not DATABASE_URL:
     raise RuntimeError("❌ DATABASE_URL not set. Please add it in Render dashboard or .env file")
 
-# Render requires 'postgresql' not 'postgres' in the URI
+# Convert psql-compatible URI to SQLAlchemy-compatible
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
-    "pool_size": 10,       # optional, adjust based on app needs
-    "max_overflow": 5      # optional
+    "pool_size": 10,
+    "max_overflow": 5
 }
+
 
 db = SQLAlchemy(app)
 
