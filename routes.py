@@ -34,10 +34,19 @@ Context:
 - Check the langauge as it will be in manglish fromat, so undertand it respond accurately
 - You also receive the last 2 previous orders of this user (`previous_orders`).
 - Use these previous orders to make smarter decisions:
+   * The message_time is the message received time in UTC. If it is after 07:30 PM India time, assume user means tomorrow unless they provide a date.
+   * If the message_time is after 06:00 AM and before 01:30 PM India time, assume user means tomorrow unless they say "today" or a date.
    * If the user already has an order for a date and only wants to add a meal, just update that date instead of overwriting.
    * If the user tries to order again for tomorrow but already has lunch and dinner, only add missing meals like breakfast.
    * If nothing exists for tomorrow, create a new order normally.
-Every reply must include the sender’s name (user_name) in a friendly tone inthe format for whatsapp text format too. For example:
+
+Meal Cut-off Rules (strict):
+1. **Breakfast (for tomorrow)**: Can be ordered if the message_time if after the 07:30 PM reminder and before 09:00 PM.  
+2. **Lunch (for tomorrow)**: Can be ordered *after the 7:30 PM reminder* and *up to 6:30 AM*.  
+3. **Dinner (for tomorrow)**: Can be ordered *after the 9:30 PM reminder* and *up to 12:30 PM*.  
+4. If a user tries to order a meal after its cutoff time has passed, do not accept the order. Instead, politely reply explaining the cutoff time.
+
+Every reply must include the sender’s name (user_name) in a friendly tone in the format for WhatsApp text too. For example:
 
 "OK {user_name}, your order has been confirmed"
 
@@ -49,11 +58,12 @@ Date & Time Rules (very important):
 1. If user explicitly specifies a date (like "on Sep 8" or "for today"), use that date.
 2. If no date is specified:
    - then check the time right now in India and the message_time that you will be recieving and think precisely and then decide the order.
-   -if you are unsure with it ask it as a query again as yu are holding chat history.
+   - if you are unsure with it ask it as a query again as you are holding chat history.
 3. If the message says "tomorrow", map it to the next calendar date after message_time.
 4. If the user says "change today's order" or similar, map it to today's date.
 5. If you are unsure about which date the user intended, ask a clarifying question instead of guessing.
 6. You are able to cancel an order too, If the user prompts to do so!
+
 Instructions:
 - Analyze the message and history to detect meals (breakfast, lunch, dinner) and intended date.
 - If the message is a valid order (new or update), return JSON like:
@@ -62,7 +72,7 @@ Instructions:
     "counter": 1,
     "order": {{"breakfast": 1|0, "lunch": 1|0, "dinner": 1|0, "date": "YYYY-MM-DD"}}
   }}
-- If no order for a particular day is recieved, mark all meals as false and , return JSON like:
+- If no order for a particular day is recieved, mark all meals as false and return JSON like:
   {{
     "reply": "<short confirmation>",
     "counter": 1,
@@ -75,9 +85,9 @@ Instructions:
     "action": "cancel",
     "date": "YYYY-MM-DD"
   }}
-- If the message is unclear or the date is ambiguous, return JSON like:
+- If the message is unclear, past cutoff, or the date is ambiguous, return JSON like:
   {{
-    "reply": "<clarifying question>",
+    "reply": "<clarifying question or cutoff explanation>",
     "counter": 0
   }}
 
@@ -197,14 +207,27 @@ def process():
         return jsonify({"error": "Missing message or user_id"}), 400
 
     if not date_in:
-        date_in = (datetime.utcnow().date() + timedelta(days=1)).isoformat()
+        date_in = "no date provided"
 
     key = f"{user_id}_{date_in}"
     history, _ = chat_histories.get(key, ([], datetime.utcnow()))
     history.append(f"User: {message}")
     chat_histories[key] = (history, datetime.utcnow())
     history_string = "\n".join(history)
-    message_time = datetime.utcnow().isoformat()
+    # Convert message_time to India time (IST, UTC+5:30)
+    message_time_utc = data.get("message_time")
+    if message_time_utc:
+        try:
+            dt_utc = datetime.fromisoformat(message_time_utc)
+        except Exception:
+            dt_utc = datetime.utcnow()
+    else:
+        dt_utc = datetime.utcnow()
+    # Add 5 hours 30 minutes for IST
+    dt_india = dt_utc + timedelta(hours=5, minutes=30)
+    message_time = dt_india.isoformat()
+    print("india time:", dt_india)
+    message_time = message_time_utc or datetime.utcnow().isoformat()
 
     print(f"Processing message from {user_name} ({user_id}) at {message_time} for date {date_in}")
 
