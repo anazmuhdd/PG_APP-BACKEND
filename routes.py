@@ -440,6 +440,8 @@ def detailed_summary():
             "breakfast": bool(o.breakfast),
             "lunch": bool(o.lunch),
             "dinner": bool(o.dinner)
+            "total_amount": o.total_amount,
+            "canceled": o.canceled
         })
 
     return jsonify({
