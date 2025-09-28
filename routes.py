@@ -414,7 +414,7 @@ def detailed_summary():
     except:
         return jsonify({"error": "invalid date"}), 400
 
-    orders = Order.query.filter_by(order_date=dt, canceled=False).all()
+    orders = Order.query.filter_by(order_date=dt).all()
     order_list = []
     for o in orders:
         user = User.query.get(o.user_id)
@@ -423,7 +423,9 @@ def detailed_summary():
             "whatsapp_id": user.whatsapp_id,
             "breakfast": bool(o.breakfast),
             "lunch": bool(o.lunch),
-            "dinner": bool(o.dinner)
+            "dinner": bool(o.dinner),
+            "total_amount": o.total_amount,
+            "canceled": bool(o.canceled)
         })
 
     return jsonify({
