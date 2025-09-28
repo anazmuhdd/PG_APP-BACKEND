@@ -2,12 +2,13 @@ import os, dotenv
 from flask import Flask
 from models import db
 from routes import bp as routes_bp
-
+from flask_cors import CORS
 dotenv.load_dotenv()
 POSTGRES_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "POSTGRES_URL")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = POSTGRES_URL
+CORS(app)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)

@@ -11,3 +11,4 @@ uuid
 flask_sqlalchemy
 psycopg2-binary
 openai
+flask-cors
