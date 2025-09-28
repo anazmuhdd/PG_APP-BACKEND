@@ -439,7 +439,7 @@ def detailed_summary():
             "whatsapp_id": user.whatsapp_id,
             "breakfast": bool(o.breakfast),
             "lunch": bool(o.lunch),
-            "dinner": bool(o.dinner)
+            "dinner": bool(o.dinner),
             "total_amount": o.total_amount,
             "canceled": o.canceled
         })
