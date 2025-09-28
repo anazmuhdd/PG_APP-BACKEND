@@ -60,13 +60,15 @@ def upsert_order_for_user(user, order_obj: dict):
         existing.lunch = l
         existing.dinner = d
         existing.total_amount = total
-        existing.canceled = False
+        existing.canceled = bool(order_obj.get("canceled", False))
         db.session.commit()
+        print("Updated existing order:", existing.as_dict())
         return existing
     new = Order(user_id=user.id, order_date=order_date,
                 breakfast=b, lunch=l, dinner=d, total_amount=total)
     db.session.add(new)
     db.session.commit()
+    print("Created new order:", new.as_dict())
     return new
 
 

@@ -139,6 +139,20 @@ def add_user():
     db.session.add(u)
     db.session.commit()
     return jsonify({"message": "✅ User created", "user": {"id": str(u.id), "whatsapp_id": u.whatsapp_id, "username": u.username}})
+# Get all users
+@bp.route("/users", methods=["GET"])
+def get_users():
+    users = User.query.all()
+    user_list = []
+    for u in users:
+        user_list.append({
+            "id": str(u.id),
+            "whatsapp_id": u.whatsapp_id,
+            "username": u.username,
+            "age": u.age,
+            "address": u.address
+        })
+    return jsonify({"users": user_list})
 
 # Direct order creation
 @bp.route("/orders", methods=["POST"])
@@ -157,11 +171,13 @@ def add_order_direct():
         return jsonify({"error": "Invalid date"}), 400
 
     order_obj = {
-        "date": data["date"],
-        "breakfast": 1 if data.get("breakfast") else 0,
-        "lunch": 1 if data.get("lunch") else 0,
-        "dinner": 1 if data.get("dinner") else 0,
+    "date": data["date"],
+    "breakfast": 1 if data.get("breakfast") else 0,
+    "lunch": 1 if data.get("lunch") else 0,
+    "dinner": 1 if data.get("dinner") else 0,
+    "canceled": bool(data.get("canceled", False))   # ✅ include canceled
     }
+    print("Direct order object:", order_obj)
 
     saved = upsert_order_for_user(u, order_obj)
     return jsonify({"message": "✅ Order recorded", "order": saved.as_dict()})
@@ -414,7 +430,7 @@ def detailed_summary():
     except:
         return jsonify({"error": "invalid date"}), 400
 
-    orders = Order.query.filter_by(order_date=dt, canceled=False).all()
+    orders = Order.query.filter_by(order_date=dt).all()
     order_list = []
     for o in orders:
         user = User.query.get(o.user_id)
@@ -423,7 +439,9 @@ def detailed_summary():
             "whatsapp_id": user.whatsapp_id,
             "breakfast": bool(o.breakfast),
             "lunch": bool(o.lunch),
-            "dinner": bool(o.dinner)
+            "dinner": bool(o.dinner),
+            "total_amount": o.total_amount,
+            "cancelled": o.canceled
         })
 
     return jsonify({
