@@ -2,6 +2,7 @@ import os, dotenv
 from flask import Flask
 from models import db
 from routes import bp as routes_bp
+from webroutes import bp as webroutesbp
 from flask_cors import CORS
 dotenv.load_dotenv()
 POSTGRES_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "POSTGRES_URL")
@@ -17,6 +18,7 @@ with app.app_context():
 
 # register blueprint
 app.register_blueprint(routes_bp)
+app.register_blueprint(webroutesbp)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5001)), debug=True)
