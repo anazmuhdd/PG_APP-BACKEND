@@ -105,17 +105,16 @@ def list_orders_for_user_by_month(whatsapp_id, month):
         # Expect month in format YYYY-MM
         year, month_num = map(int, month.split("-"))
         start_date = date(year, month_num, 1)
-        print(start_date)
-        # If it's the current month, end_date = today, else = last day of the month
-        if year == date.today().year and month_num == date.today().month:
-            end_date = date.today()
+    
+        # Always get the last day of the given month
+        if month_num == 12:
+            end_date = date(year + 1, 1, 1) - timedelta(days=1)
         else:
-            # Trick: get the 1st of the next month, then subtract 1 day
-            if month_num == 12:
-                end_date = date(year + 1, 1, 1) - timedelta(days=1)
-            else:
-                end_date = date(year, month_num + 1, 1) - timedelta(days=1)
-        print(end_date)
+            end_date = date(year, month_num + 1, 1) - timedelta(days=1)
+        
+        print("Start:", start_date)
+        print("End:", end_date)
+
     except ValueError:
         return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
 
