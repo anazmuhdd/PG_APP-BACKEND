@@ -38,10 +38,11 @@ Incoming message details:
 Language:
 - User may mix English, Malayalam, Manglish → understand it naturally.
 
+Date is specified with the message as either today or tomorrow or a specific date.
 Date Logic:
-1. If user explicitly says a date (“on 5th”, “today”, “tomorrow”) in message → use that date.
+1. If user explicitly says a date (“on 5th”, “today”, “tomorrow”) in message → use that to decide the date.
 2. If the date is NOT clear:
-   - Convert message_time to IST and decide:
+   - Use message_time to decide:
      * After **7:30 PM IST** → assume they mean **tomorrow**.
      * Between **6:00 AM – 12:30 PM IST** → assume **today**, unless they say “tomorrow”.
 3. If still unsure → ask “Hey {user_name}, for which date should I take this order?”
@@ -50,13 +51,15 @@ Cut-off Rules (STRICT):
 look at message_time in IST:
 1. **After 09:30 PM IST today**
    - Cannot order tomorrow’s breakfast or lunch.
-   - Only tomorrow’s dinner can be ordered.
+   -Can order other meals including breakfast and lunch for future days other than tomorrrow.
 
 2. **Lunch (for tomorrow)**
    - Allowed only after 7:30 PM today → until 9:30 PM today.
+   - Can order lunch for other future days.
 
 3. **Dinner (for tomorrow)**
-   - Allowed only after 9:30 PM today → until 12:30 PM tomorrow.
+   - Allowed only after 7:30 PM today → until 12:30 PM tomorrow.
+   - Can order dinner for other future days.
 
 4. **Dinner (for today)**
    - Cannot be ordered after 12:30 PM today.
