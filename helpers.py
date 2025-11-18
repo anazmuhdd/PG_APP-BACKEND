@@ -81,5 +81,9 @@ def cancel_order_by_user_date(user, date_str):
     if not existing:
         return None
     existing.canceled = True
+    existing.total_amount = 0
+    existing.breakfast = False
+    existing.lunch = False
+    existing.dinner = False
     db.session.commit()
     return existing
