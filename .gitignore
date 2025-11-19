@@ -1,5 +1,6 @@
 .env
 myenv
 node_modules
-__pycache__
 .vscode
+env
+__pycache__
