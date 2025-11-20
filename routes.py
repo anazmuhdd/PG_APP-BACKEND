@@ -156,16 +156,17 @@ If the order is invalid, return:
 prompt = ChatPromptTemplate.from_template(template)
 rules_prompt = ChatPromptTemplate.from_template(rules_template)
 bp = Blueprint("routes", __name__)
+from datetime import datetime, timedelta, time
+
 @bp.route("/process", methods=["POST"])
 def process():
-    #get data from request
     data = request.get_json() or {}
     message = data.get("message", "").strip()
     user_id = data.get("user_id")
     user_name = data.get("user_name")
     date_in = data.get("date")
-    
-    # Fetch last 2 orders for this user (most recent first)
+
+    # Fetch last 2 orders for this user
     previous_orders = []
     if user_id:
         u = User.query.filter_by(whatsapp_id=user_id).first()
@@ -181,62 +182,66 @@ def process():
                     "date": o.order_date.isoformat(),
                     "breakfast": o.breakfast,
                     "lunch": o.lunch,
-                    "dinner": o.dinner
+                    "dinner": o.dinner,
                 }
                 for o in recent_orders
             ]
+
     if not message or not user_id:
         return jsonify({"error": "Missing message or user_id"}), 400
 
     if not date_in:
         date_in = "no date provided"
 
-    # Add message to chat history
+    # Chat history
     key = f"{user_id}_{date_in}"
     history, _ = chat_histories.get(key, ([], datetime.utcnow()))
     chat_histories[key] = (history, datetime.utcnow())
     history_string = "\n".join(history)
-    
-    #prepare message time
+
+    # Time in IST
     dt_utc = datetime.utcnow()
     dt_india = dt_utc + timedelta(hours=5, minutes=30)
-    time=dt_india.time()
-    date=dt_india.date()
-    print(f"Processing message from {user_name} ({user_id}) at {time} for date {date}:\n", message)
+    time_now_display = dt_india.time()
+    date_now_display = dt_india.date()
 
-    # Call NVIDIA Qwen LLM
+    print(f"Processing message from {user_name} ({user_id}) at {time_now_display}:\n", message)
+
+    # ---------------------------------
+    # CALL LLM (First stage only)
+    # ---------------------------------
     try:
         filled_prompt = prompt.format(
             history=history_string,
             message=message,
             user_id=user_id,
             user_name=user_name or "Unknown",
-            message_time=time,
-            message_date=date,
-            previous_orders=json.dumps(previous_orders)
+            message_time=time_now_display,
+            message_date=date_now_display,
+            previous_orders=json.dumps(previous_orders),
         )
         print("Prompt:\n", filled_prompt)
+
         completion = client.chat.completions.create(
             model="qwen/qwen3-235b-a22b",
             messages=[{"role": "user", "content": filled_prompt}],
             temperature=0.2,
             top_p=0.7,
-            extra_body={"chat_template_kwargs": {"thinking":False}},
+            extra_body={"chat_template_kwargs": {"thinking": False}},
             max_tokens=8192,
-            stream=False
+            stream=False,
         )
         result = completion.choices[0].message.content
+
     except Exception:
         app.logger.exception("LLM invocation failed")
         return jsonify({"reply": "Sorry, LLM error", "counter": 0}), 500
 
-    # Clean LLM output
+    # Clean result
     clean = re.sub(r"<think>.*?</think>", "", result, flags=re.DOTALL).strip()
     cleaned_json_str = re.sub(r"^```json\s*|\s*```$", "", clean, flags=re.DOTALL).strip()
 
-
-    #parse the llm output
-    parsed, reply, counter, order_obj, action = None, None, 0, None, None
+    parsed, reply, counter, order_obj, action, update = None, None, 0, None, None, None
     try:
         parsed = json.loads(cleaned_json_str)
         print("Parsed JSON:\n", parsed)
@@ -248,93 +253,106 @@ def process():
         counter = int(parsed.get("counter", 0))
         order_obj = parsed.get("order")
         action = parsed.get("action")
-        update= parsed.get("update")
+        update = parsed.get("update")
+
         if order_obj and order_obj.get("date"):
             date_in = order_obj["date"]
         elif parsed.get("date"):
             date_in = parsed["date"]
 
     user = get_or_create_user(user_id, user_name)
-
     response_payload = {"reply": reply or "", "counter": counter}
 
-    if counter == 1:
-        if action == "cancel":
-            cancel_date = parsed.get("date") or date_in
-            canceled_order = cancel_order_by_user_date(user, cancel_date)
-            if canceled_order:
-                response_payload["reply"] = parsed.get(
-                    "reply", f"✅ Order for {cancel_date} canceled."
-                )
-                response_payload["canceled_order"] = canceled_order.as_dict()
-            else:
-                response_payload["reply"] = parsed.get(
-                    "reply", f"No active order found for {cancel_date}."
-                )
-        elif order_obj:
-            time_now=datetime.utcnow()
-            time_now=time_now+ timedelta(hours=5, minutes=30)
-            date_now=time_now.date()
-            time_now=time_now.time()
-            time_now=time_now.strftime("%I:%M %p")
-            order_obj.setdefault("date", date_in)
-            order_obj["breakfast"] = int(order_obj.get("breakfast", 0))
-            order_obj["lunch"] = int(order_obj.get("lunch", 0))
-            order_obj["dinner"] = int(order_obj.get("dinner", 0))
-            try:
-                if update:
-                    filled_rules_prompt= rules_prompt.format(
-                    user_name= user_name,
-                    order_date= order_obj["date"],
-                    breakfast= "yes" if update["breakfast"] else "no",
-                    lunch= "yes" if update["lunch"] else "no",
-                    dinner= "yes" if update["dinner"] else "no",
-                    time= time_now,
-                    date= date_now
-                )
-                else:
-                    filled_rules_prompt= rules_prompt.format(
-                        user_name= user_name,
-                        order_date= order_obj["date"],
-                        breakfast= "yes" if order_obj["breakfast"] else "no",
-                        lunch= "yes" if order_obj["lunch"] else "no",
-                        dinner= "yes" if order_obj["dinner"] else "no",
-                        time= time_now,
-                        date= date_now
-                    )
-                print("rules prompt: ",filled_rules_prompt)
-                completion = client.chat.completions.create(
-                    model="qwen/qwen3-235b-a22b",
-                    messages=[{"role": "user", "content": filled_rules_prompt}],
-                    temperature=0.2,
-                    top_p=0.7,
-                    extra_body={"chat_template_kwargs": {"thinking":True}},
-                    max_tokens=8192,
-                    stream=False
-                )
-                print("reply:", completion.choices[0].message.content)
-                cleaned_json_str = re.sub(r"^```json\s*|\s*```$", "", completion.choices[0].message.content, flags=re.DOTALL).strip()
-                parsed1, action, reply =None, None, None
-                try:
-                    parsed1=json.loads(cleaned_json_str)
-                    print("parsed json: ",parsed1)
-                except json.JSONDecodeError:
-                    print("failed to pare")
-                    reply=cleaned_json_str
-                action= parsed1.get("action","accept")
-                reply=parsed1.get("reply", "")
-                
-                if action == "accept":
-                    saved = upsert_order_for_user(user, order_obj)
-                    response_payload["reply"] = parsed.get("reply", "✅ Order recorded.")
-                    response_payload["order"] = saved.as_dict()
-                else:
-                    response_payload["reply"]= reply
-            except Exception:
-                app.logger.exception("LLM invocation failed")
-                return jsonify({"reply": "Sorry, LLM error", "counter": 0}), 500
+    # ============================================
+    #  CANCEL LOGIC
+    # ============================================
+    if counter == 1 and action == "cancel":
+        cancel_date = parsed.get("date") or date_in
+        canceled_order = cancel_order_by_user_date(user, cancel_date)
 
+        if canceled_order:
+            response_payload["reply"] = (
+                parsed.get("reply", f"✅ Order for {cancel_date} canceled.")
+            )
+            response_payload["canceled_order"] = canceled_order.as_dict()
+        else:
+            response_payload["reply"] = (
+                parsed.get("reply", f"No active order found for {cancel_date}.")
+            )
+
+        # Save bot reply to chat history
+        hist, _ = chat_histories.get(key, ([], datetime.utcnow()))
+        hist.append(f"Bot: {response_payload['reply']}")
+        chat_histories[key] = (hist, datetime.utcnow())
+        return jsonify(response_payload)
+
+    # ============================================
+    #  ORDER VALIDATION LOGIC (NO LLM)
+    # ============================================
+    if counter == 1 and order_obj:
+        now_ist = datetime.utcnow() + timedelta(hours=5, minutes=30)
+        today = now_ist.date()
+        cur_time = now_ist.time()
+
+        order_date = datetime.strptime(order_obj["date"], "%Y-%m-%d").date()
+
+        bf = int(order_obj.get("breakfast", 0))
+        ln = int(order_obj.get("lunch", 0))
+        dn = int(order_obj.get("dinner", 0))
+
+        cutoff_prev_night = time(21, 30)  # 9:30 PM prev night
+        cutoff_today_dinner = time(12, 30)  # 12:30 PM today
+
+        def validate_meal(meal, active):
+            if not active:
+                return True, ""
+
+            # Future day beyond tomorrow → always allowed
+            if order_date > today + timedelta(days=1):
+                return True, ""
+
+            # Breakfast / Lunch → must be before 9:30 PM previous day
+            if meal in ("breakfast", "lunch"):
+                prev_day = order_date - timedelta(days=1)
+                if today != prev_day:
+                    return False, f"You can order {meal} only before 9:30 PM on the previous night."
+                if cur_time > cutoff_prev_night:
+                    return False, f"{meal.capitalize()} order rejected {user_name}. Cutoff is 9:30 PM previous night."
+                return True, ""
+
+            # Dinner
+            if meal == "dinner":
+                # Today's dinner → before 12:30 PM
+                if order_date == today:
+                    if cur_time > cutoff_today_dinner:
+                        return False, f"Dinner order rejected {user_name}. Today's dinner cutoff is 12:30 PM."
+                    return True, ""
+
+                # Tomorrow's dinner → always allowed
+                if order_date == today + timedelta(days=1):
+                    return True, ""
+
+                return True, ""
+
+            return True, ""
+
+        # Validate each meal
+        for meal, val in [("breakfast", bf), ("lunch", ln), ("dinner", dn)]:
+            ok, err = validate_meal(meal, val)
+            if not ok:
+                response_payload["reply"] = err
+                response_payload["counter"] = 0
+                return jsonify(response_payload)
+
+        # Order is valid → save
+        saved = upsert_order_for_user(user, order_obj)
+        response_payload["reply"] = f"👌 Order updated, {user_name}!"
+        response_payload["order"] = saved.as_dict()
+        response_payload["counter"] = 1
+
+    # Save bot reply to chat history
     hist, _ = chat_histories.get(key, ([], datetime.utcnow()))
     hist.append(f"Bot: {response_payload['reply']}")
     chat_histories[key] = (hist, datetime.utcnow())
+
     return jsonify(response_payload)
