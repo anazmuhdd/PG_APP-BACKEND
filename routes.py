@@ -340,13 +340,13 @@ def process():
         for meal, val in [("breakfast", bf), ("lunch", ln), ("dinner", dn)]:
             ok, err = validate_meal(meal, val)
             if not ok:
-                response_payload["reply"] = err
+                response_payload["reply"] = f"Sorry {user_name}, Order cannot be placed due to the following:\n "+err
                 response_payload["counter"] = 0
                 return jsonify(response_payload)
 
         # Order is valid → save
         saved = upsert_order_for_user(user, order_obj)
-        response_payload["reply"] = f"👌 Order updated, {user_name}!"
+        response_payload["reply"] = reply
         response_payload["order"] = saved.as_dict()
         response_payload["counter"] = 1
 
