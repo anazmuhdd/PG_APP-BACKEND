@@ -289,3 +289,29 @@ def daily_report():
         "total_orders": len(order_details),
         "missing_count": len(missing_users)
     })
+    
+@bp.route("/orders/remark", methods=["POST"])
+def add_order_remark():
+    data = request.get_json() or {}
+    remark=data.get("remark")
+    date_s=data.get("date")
+    
+    #do add the remark to all orders for that date
+    if not remark or not date_s:
+        return jsonify({"error": "remark and date required"}), 400
+    orders = Order.query.filter_by(order_date=date_s).all()
+    for o in orders:
+        o.remark = remark
+        db.session.commit()
+
+    order = orders[0] if orders else None
+    return jsonify({"message": "Remark added", "order": order.as_dict()})
+
+@bp.route("/orders/remark/<date_s>", methods=["GET"])
+def get_order_remarks(date_s):
+    #take the first order for that date and return the remark
+    orders = Order.query.filter_by(order_date=date_s).all()
+    order = orders[0] if orders else None
+    if order and order.remark:
+        return jsonify({"date": date_s, "remark": order.remark})
+    return jsonify({"date": date_s, "remark": ""})
