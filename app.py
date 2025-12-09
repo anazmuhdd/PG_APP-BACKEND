@@ -5,7 +5,7 @@ from routes import bp as routes_bp
 from webroutes import bp as webroutesbp
 from flask_cors import CORS
 dotenv.load_dotenv()
-POSTGRES_URL = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "POSTGRES_URL")
+POSTGRES_URL= dotenv.get_key(dotenv.find_dotenv(), "DATABASE_URL")
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = POSTGRES_URL

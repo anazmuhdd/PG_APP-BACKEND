@@ -15,7 +15,7 @@ from openai import OpenAI  # NVIDIA uses OpenAI-compatible API
 
 # --- Load NVIDIA API key ---
 dotenv.load_dotenv()
-NVIDIA_API_KEY = dotenv.get_key(os.path.join(os.path.dirname(__file__), ".env"), "nvidia_api_key")
+NVIDIA_API_KEY = dotenv.get_key(dotenv.find_dotenv(), "nvidia_api_key")
 
 # --- LLM Setup ---
 client = OpenAI(
