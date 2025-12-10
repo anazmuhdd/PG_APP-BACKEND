@@ -313,5 +313,5 @@ def get_order_remarks(date_s):
     orders = Order.query.filter_by(order_date=date_s).all()
     order = orders[0] if orders else None
     if order and order.remarks:
-        return jsonify({"date": date_s, "remarks": order.remark})
+        return jsonify({"date": date_s, "remarks": order.remarks})
     return jsonify({"dates": date_s, "remarks": ""})
