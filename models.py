@@ -24,7 +24,8 @@ class Order(db.Model):
     breakfast = db.Column(db.Boolean, default=False)
     lunch = db.Column(db.Boolean, default=False)
     dinner = db.Column(db.Boolean, default=False)
-    total_amount = db.Column(db.Integer, nullable=False)
+    total_amount = db.Column(db.Integer, nullable=False),
+    remarks = db.Column(db.Text, nullable=True)
     canceled = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, server_default=db.func.now())
 
