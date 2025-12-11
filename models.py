@@ -38,5 +38,6 @@ class Order(db.Model):
             "lunch": self.lunch,
             "dinner": self.dinner,
             "total_amount": self.total_amount,
+            "remarks": self.remarks,
             "canceled": self.canceled,
         }
