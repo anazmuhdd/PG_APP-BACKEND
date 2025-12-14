@@ -220,7 +220,6 @@ def process():
             message_date=date_now_display,
             previous_orders=json.dumps(previous_orders),
         )
-        print("Prompt:\n", filled_prompt)
 
         completion = client.chat.completions.create(
             model="qwen/qwen3-235b-a22b",
@@ -244,7 +243,6 @@ def process():
     parsed, reply, counter, order_obj, action, update = None, None, 0, None, None, None
     try:
         parsed = json.loads(cleaned_json_str)
-        print("Parsed JSON:\n", parsed)
     except json.JSONDecodeError:
         reply, counter = cleaned_json_str, 0
 

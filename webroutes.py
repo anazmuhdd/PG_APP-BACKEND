@@ -78,7 +78,7 @@ def add_order_direct():
     "dinner": 1 if data.get("dinner") else 0,
     "canceled": bool(data.get("canceled", False))   
     }
-    print("Direct order object:", order_obj)
+
 
     saved = upsert_order_for_user(u, order_obj)
     return jsonify({"message": "✅ Order recorded", "order": saved.as_dict()})
@@ -111,10 +111,6 @@ def list_orders_for_user_by_month(whatsapp_id, month):
             end_date = date(year + 1, 1, 1) - timedelta(days=1)
         else:
             end_date = date(year, month_num + 1, 1) - timedelta(days=1)
-        
-        print("Start:", start_date)
-        print("End:", end_date)
-
     except ValueError:
         return jsonify({"error": "Invalid month format. Use YYYY-MM"}), 400
 
