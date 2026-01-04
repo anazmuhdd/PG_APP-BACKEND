@@ -222,7 +222,7 @@ def process():
         )
 
         completion = client.chat.completions.create(
-            model="qwen/qwen3-235b-a22b",
+            model="qwen/qwen3-next-80b-a3b-instruct",
             messages=[{"role": "user", "content": filled_prompt}],
             temperature=0.2,
             top_p=0.7,
@@ -231,6 +231,7 @@ def process():
             stream=False,
         )
         result = completion.choices[0].message.content
+        print("completed: ", completion)
 
     except Exception:
         app.logger.exception("LLM invocation failed")
